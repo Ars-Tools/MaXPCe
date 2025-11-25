@@ -9,6 +9,7 @@ let package = Package(
         .macOS(.v15)
     ],
     products: [
+        .library(name: "MaXPCe.MXS", targets: ["MXS"])
     ],
     targets: [
         .executableTarget(
