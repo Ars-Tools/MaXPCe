@@ -23,4 +23,17 @@ extension Array where Element: XPCObject {
         return object
     }
 }
+extension Array where Element: BinaryInteger {
+    @inlinable
+    init(parseInt64 array: xpc_object_t) {
+        self.init()
+        xpc_array_apply(array) {
+            precondition(xpc_get_type($1) == XPC_TYPE_INT64)
+            if case.some(let val) = Element(exactly: xpc_int64_get_value($1)) {
+                self.append(val)
+            }
+            return true
+        }
+    }
+}
 extension List: XPCObject {}
