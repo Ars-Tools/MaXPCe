@@ -118,7 +118,6 @@ extension External {
                                 case.some(let o) = xpc_dictionary_get_value($0, "o"), xpc_get_type(o) == XPC_TYPE_ARRAY,
                                 case.some(let r) = xpc_dictionary_create_reply($0),
                                 case.some(let p) = xpc_dictionary_get_remote_connection($0) else { break }
-                            
                             do {
                                 let render = try impress.dsp(sampleRate: xpc_double_get_value(s), vectorSize: .init(xpc_int64_get_value(c)))
                                 let period = Int(xpc_int64_get_value(n))
@@ -265,7 +264,7 @@ extension External {
                         xpc_dictionary_set_value(r, "=", msg(args: .init(xpc: a)))
                         xpc_connection_send_message(p, r)
                     default:
-                        os_log(.info, log: log, "%{public}@ is not handled @%d", String(describing: $0), #line)
+                        os_log(.debug, log: log, "%{public}@ is not handled @%d", String(describing: $0), #line)
                     }
                 }
                 xpc_connection_activate($0)
