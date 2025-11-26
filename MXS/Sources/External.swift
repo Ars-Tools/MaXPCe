@@ -118,43 +118,40 @@ extension External {
                                 case.some(let o) = xpc_dictionary_get_value($0, "o"), xpc_get_type(o) == XPC_TYPE_ARRAY,
                                 case.some(let r) = xpc_dictionary_create_reply($0),
                                 case.some(let p) = xpc_dictionary_get_remote_connection($0) else { break }
+                            let mᵢ = Array<Int>(parseInt64: i)
+                            let mₒ = Array<Int>(parseInt64: o)
+                            let period = Int(xpc_int64_get_value(n))
+                            let buffer = Buffer(xpc: m)
                             do {
                                 let render = try impress.dsp(sampleRate: xpc_double_get_value(s), vectorSize: .init(xpc_int64_get_value(c)))
-                                let period = Int(xpc_int64_get_value(n))
-                                let buffer = Buffer(xpc: m)
-                                let sᵢ = repeatElement(i, count: xpc_array_get_count(i)).enumerated().compactMap {
-                                    Int(exactly: xpc_array_get_int64($1, $0))
-                                }.reduce(.max, min)
-                                let sₒ = repeatElement(o, count: xpc_array_get_count(o)).enumerated().compactMap {
-                                    Int(exactly: xpc_array_get_int64($1, $0))
-                                }.reduce(.max, min)
+                                let sᵢ = mᵢ.min() ?? .zero
+                                let sₒ = mₒ.min() ?? .zero
                                 xpc_dictionary_set_value(r, "=", dsp { i, o, start, count in
-                                    withUnsafeTemporaryAllocation(of: Float64.self, capacity: max(i, o) * count) {
+                                    withUnsafeTemporaryAllocation(of: Float64.self, capacity: (i + o) * count) {
                                         guard case.some(let window) = $0.baseAddress else { return }
                                         let base = start % period
                                         let head = min(count, period - base)
                                         let tail = max(0, base + count - period)
+                                        let wᵢ = window.advanced(by: 0 * i * count)
+                                        let wₒ = window.advanced(by: 1 * i * count)
                                         let mᵢ = buffer.start.assumingMemoryBound(to: Float64.self).advanced(by: sᵢ)
-                                        vDSP_mmovD(mᵢ.advanced(by: base), window, .init(head), .init(i), .init(period), .init(count))
-                                        vDSP_mmovD(mᵢ, window.advanced(by: head), .init(tail), .init(i), .init(period), .init(count))
-                                        render(window, i, count, window, o, count, start, count)
+                                        vDSP_mmovD(mᵢ.advanced(by: base), wᵢ, .init(head), .init(i), .init(period), .init(count))
+                                        vDSP_mmovD(mᵢ, wᵢ.advanced(by: head), .init(tail), .init(i), .init(period), .init(count))
+                                        render(wᵢ, i, count,
+                                               wₒ, o, count,
+                                               start, count)
                                         let mₒ = buffer.start.assumingMemoryBound(to: Float64.self).advanced(by: sₒ)
-                                        vDSP_mmovD(window, mₒ.advanced(by: base), .init(head), .init(o), .init(count), .init(period))
-                                        vDSP_mmovD(window.advanced(by: head), mₒ, .init(tail), .init(o), .init(count), .init(period))
+                                        vDSP_mmovD(wₒ, mₒ.advanced(by: base), .init(head), .init(o), .init(count), .init(period))
+                                        vDSP_mmovD(wₒ.advanced(by: head), mₒ, .init(tail), .init(o), .init(count), .init(period))
                                     }
                                 })
                             } catch {
                                 os_log(.error, log: log, "dsp error %{public}@", String(describing: error))
-                                let buffer = Buffer(xpc: m)
-                                let period = Int(xpc_int64_get_value(n))
-                                let offset = repeatElement(o, count: xpc_array_get_count(o)).enumerated().compactMap {
-                                    Int(exactly: xpc_array_get_int64($1, $0))
-                                }
                                 xpc_dictionary_set_value(r, "=", dsp { i, o, start, count in
                                     let base = start % period
                                     let head = min(count, period - base)
                                     let tail = max(0, base + count - period)
-                                    for cursor in offset.lazy.map(buffer.start.assumingMemoryBound(to: Float64.self).advanced(by:)) {
+                                    for cursor in mₒ.lazy.map(buffer.start.assumingMemoryBound(to: Float64.self).advanced(by:)) {
                                         cursor.advanced(by: base).update(repeating: .zero, count: head)
                                         cursor.update(repeating: .zero, count: tail)
                                     }
