@@ -6,4 +6,5 @@
 //
 import Dispatch
 import MXS
-withExtendedLifetime(External<SinSynth>(as: "tools.ars.xpc.mxo.SinSynth"), dispatchMain)
+//withExtendedLifetime(External<SinSynth>(as: "xpc.mxo.server"), dispatchMain)
+withExtendedLifetime(External<SpeechRecognition>(as: "xpc.mxo.server"), dispatchMain)
