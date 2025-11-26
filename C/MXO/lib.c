@@ -1,7 +1,6 @@
 #include"ext.h"
 #include"z_dsp.h"
 #include<errno.h>
-#include<spawn.h>
 #include<pthread.h>
 #include<stdatomic.h>
 #include<xpc/xpc.h>
@@ -64,19 +63,19 @@ typedef struct {
     } const refer;
     struct {
         os_unfair_lock const ulock;
-        xpc_connection_t proxy;
+        xpc_connection_t __nullable proxy;
         
         xpc_object_t __nonnull const store;
     } kr;
     
     struct {
         os_unfair_lock const ulock;
-        xpc_connection_t proxy;
+        xpc_connection_t __nullable proxy;
         
         double * __nullable start; // map address
         intptr_t bytes;            // map bytesize
-        xpc_object_t immap; // cursor for input
-        xpc_object_t ommap; // cursor for output
+        xpc_object_t __nullable immap; // cursor for input
+        xpc_object_t __nullable ommap; // cursor for output
         
         double freqs;   // sampleRate
         intptr_t frame; // vectorSize
@@ -212,12 +211,12 @@ C74_HIDDEN void del(t_xpc const*__nonnull const this) {
         xpc_release(this->kr.proxy);
     if ( this->ar.proxy )
         xpc_release(this->ar.proxy);
+    if ( this->kr.store )
+        xpc_release(this->kr.store);
     if ( this->ar.immap )
         xpc_release(this->ar.immap);
     if ( this->ar.ommap )
         xpc_release(this->ar.ommap);
-    if ( this->kr.store )
-        xpc_release(this->kr.store);
     if ( this->ar.start && this->ar.bytes )
         munmap(this->ar.start, this->ar.bytes);
 }
@@ -411,7 +410,7 @@ C74_HIDDEN void set(t_xpc const*const this, t_symbol*__nonnull const msg, intptr
                                 xpc_object_t const arg = xpc_array_create_atom(argc, argv);
                                 xpc_dictionary_set_string(req, "/", "p");
                                 xpc_dictionary_set_string(req, "k", atom_getsym(argv+0)->s_name);
-                                xpc_dictionary_set_string(req, "v", atom_getsym(argv+0)->s_name);
+                                xpc_dictionary_set_string(req, "v", atom_getsym(argv+1)->s_name);
                                 xpc_release(arg);
                             });
                             break;
@@ -725,16 +724,16 @@ C74_EXPORT void ext_main(void*const _) {
         class_addattr(object, attr_offset_new("delay", gensym("long"), 0, (method const)0, (method const)0, offsetof(t_xpc, refer.delay)));
         class_addattr(object, attr_offset_new("guard", gensym("long"), 0, (method const)0, (method const)0, offsetof(t_xpc, refer.guard)));
         
-		// Assist
-		class_addmethod(object, (method const)assist, "assist", A_CANT, 0);
+        // Assist
+        class_addmethod(object, (method const)assist, "assist", A_CANT, 0);
         class_addmethod(object, (method const)dblclick, "dblclick", A_CANT, 0);
         class_addmethod(object, (method const)input, "inputchanged", A_CANT, 0);
         class_addmethod(object, (method const)output, "multichanneloutputs", A_CANT, 0);
-		
-		// DSP Initialisation
-		class_dspinit(object);
-		
-		// Register
-		class_register(CLASS_BOX, class = object);
-	}
+        
+        // DSP Initialisation
+        class_dspinit(object);
+        
+        // Register
+        class_register(CLASS_BOX, class = object);
+    }
 }
