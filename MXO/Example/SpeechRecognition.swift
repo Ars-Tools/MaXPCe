@@ -4,7 +4,7 @@
 //
 //  Created by Kota on 11/26/25.
 //
-import MXS
+import MXO
 import Speech
 import CoreAudio
 final class SpeechRecognition: Internal, @unchecked Sendable {

@@ -4,7 +4,7 @@
 //
 //  Created by Kota on 11/24/25.
 //
-import MXS
+import MXO
 import Synchronization
 import simd
 final class SinSynth: Internal, @unchecked Sendable {

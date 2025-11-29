@@ -9,13 +9,13 @@ let package = Package(
         .macOS(.v15)
     ],
     products: [
-        .library(name: "MaXPCe.MXS", targets: ["MXO"])
+        .library(name: "MaXPCe.MXO", targets: ["MXO"])
     ],
     targets: [
         .executableTarget(
             name: "MXO-Example",
             dependencies: ["MXO"],
-            path: "MXO/Sources"
+            path: "MXO/Example"
         ),
         .target(
             name: "MXO",
