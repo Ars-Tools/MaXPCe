@@ -1,4 +1,4 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.0
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -9,17 +9,21 @@ let package = Package(
         .macOS(.v15)
     ],
     products: [
-        .library(name: "MaXPCe.MXS", targets: ["MXS"])
+        .library(name: "MaXPCe.MXS", targets: ["MXO"])
     ],
     targets: [
         .executableTarget(
-            name: "Example",
-            dependencies: ["MXS"],
-            path: "Example/Sources"
+            name: "MXO-Example",
+            dependencies: ["MXO"],
+            path: "MXO/Sources"
         ),
         .target(
-            name: "MXS",
-            path: "MXS/Sources"
+            name: "MXO",
+            path: "MXO/Sources"
+        ),
+        .target(
+            name: "MXI",
+            path: "MXI/Sources"
         )
     ]
 )
