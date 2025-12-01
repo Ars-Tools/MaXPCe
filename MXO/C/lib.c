@@ -674,8 +674,11 @@ C74_HIDDEN void dsp64(t_xpc*const this, t_object const*const dsp64, long const*c
             xpc_release(this->ar.immap);
         this->ar.immap = xpc_array_create_empty();
         for ( register intptr_t j = 0, J = inlet_count(this) - 0 ; j < J ; ++ j )
-            for ( register intptr_t k = 0, K = object_method(dsp64, msg, this, j) ; k < K ; ++ k, this->ar.bytes += this->ar.cycle )
-                xpc_array_append_value(this->ar.immap, xpc_int64_create(this->ar.bytes));
+            for ( register intptr_t k = 0, K = object_method(dsp64, msg, this, j) ; k < K ; ++ k, this->ar.bytes += this->ar.cycle ) {
+                xpc_object_t const v = xpc_int64_create(this->ar.bytes);
+                xpc_array_append_value(this->ar.immap, v);
+                xpc_release(v);
+            }
     }
     {
         register t_symbol const * __nonnull const msg = gensym("getnumoutputchannels");
@@ -683,8 +686,11 @@ C74_HIDDEN void dsp64(t_xpc*const this, t_object const*const dsp64, long const*c
             xpc_release(this->ar.ommap);
         this->ar.ommap = xpc_array_create_empty();
         for ( register intptr_t j = 0, J = outlet_count(this) - 1 ; j < J ; ++ j )
-            for ( register intptr_t k = 0, K = object_method(dsp64, msg, this, j) ; k < K ; ++ k, this->ar.bytes += this->ar.cycle )
-                xpc_array_append_value(this->ar.ommap, xpc_int64_create(this->ar.bytes));
+            for ( register intptr_t k = 0, K = object_method(dsp64, msg, this, j) ; k < K ; ++ k, this->ar.bytes += this->ar.cycle ) {
+                xpc_object_t const v = xpc_int64_create(this->ar.bytes);
+                xpc_array_append_value(this->ar.ommap, v);
+                xpc_release(v);
+            }
     }
     
     this->ar.start = this->ar.bytes ?
