@@ -6,8 +6,10 @@
 //
 import XPC
 public final class Buffer: @unchecked Sendable, XPCObject {
-    public let start: UnsafeMutableRawPointer
-    public let count: Int
+    @usableFromInline
+    let start: UnsafeMutableRawPointer
+    @usableFromInline
+    let count: Int
     @inlinable
     public init(xpc object: xpc_object_t) {
         precondition(xpc_get_type(object) == XPC_TYPE_SHMEM)
@@ -15,6 +17,7 @@ public final class Buffer: @unchecked Sendable, XPCObject {
         count = xpc_shmem_map(object, &`catch`)
         start = unsafeBitCast(`catch`, to: UnsafeMutableRawPointer.self)
     }
+    @inlinable
     public init() {
         start = unsafeBitCast(Optional<UnsafeMutableRawPointer>.none, to: UnsafeMutableRawPointer.self)
         count = 0
@@ -24,6 +27,7 @@ public final class Buffer: @unchecked Sendable, XPCObject {
     }
 }
 extension Buffer {
+    @inlinable
     public var xpc: xpc_object_t {
         xpc_shmem_create(start, count)
     }

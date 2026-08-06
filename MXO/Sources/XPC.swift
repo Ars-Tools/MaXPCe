@@ -5,6 +5,7 @@
 //  Created by Kota on 11/24/25.
 //
 import XPC
+import MAX
 public protocol XPCObject: Sendable {
     init(xpc object: xpc_object_t)
     var xpc: xpc_object_t { get }
@@ -12,7 +13,12 @@ public protocol XPCObject: Sendable {
 extension String {
     @inlinable
     public init(xpc object: xpc_object_t) {
-        self.init(decoding: UnsafeBufferPointer(start: xpc_string_get_string_ptr(object), count: xpc_string_get_length(object)).withMemoryRebound(to: UInt8.self, \.self), as: UTF8.self)
+        precondition(xpc_get_type(object) == XPC_TYPE_STRING)
+        self = UnsafeBufferPointer(start: xpc_string_get_string_ptr(object),
+                                   count: xpc_string_get_length(object)
+        ).withMemoryRebound(to: UInt8.self) {
+            .init(decoding: $0, as: UTF8.self)
+        }
     }
 }
 extension xpc_connection_t {
