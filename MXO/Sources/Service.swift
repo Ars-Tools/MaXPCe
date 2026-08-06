@@ -1,14 +1,15 @@
 //
-//  External.swift
+//  Service.swift
 //  MaXPCe
 //
-//  Created by Kota on 11/24/25.
+//  Created by Kota on 8/6/26.
 //
 import func Accelerate.vDSP_mmovD
 @preconcurrency import XPC
 @preconcurrency import Combine
 import os.log
-public struct External<MXO: Internal>: Sendable {
+import MAX
+public struct Service<Object: MAX.EO>: Sendable {
     @usableFromInline
     let log: OSLog
     @usableFromInline
@@ -18,7 +19,15 @@ public struct External<MXO: Internal>: Sendable {
     @usableFromInline
     let xpc: xpc_connection_t
 }
-extension External {
+// MARK: EO
+extension Service {
+    
+}
+extension Service {
+    
+}
+// MARK: MC
+extension Service where Object: MAX.MC {
     @inlinable // dsp worker thread
     func dsp(render: @escaping@Sendable(Int, Int, Int, Int) -> Void) -> xpc_endpoint_t {
         let express = xpc_connection_create(.none, .some(dsp))
@@ -33,7 +42,7 @@ extension External {
                             case.some(let c) = xpc_dictionary_get_value($0, "c"), xpc_get_type(c) == XPC_TYPE_INT64,
                             case.some(let i) = xpc_dictionary_get_value($0, "i"), xpc_get_type(i) == XPC_TYPE_INT64,
                             case.some(let o) = xpc_dictionary_get_value($0, "o"), xpc_get_type(o) == XPC_TYPE_INT64 else { break }
-                        render(.init(xpc_int64_get_value(i)), .init(xpc_int64_get_value(o)), .init(xpc_int64_get_value(s)), .init(xpc_int64_get_value(c)))
+                        render(.init(xpc_int64_get_value(s)), .init(xpc_int64_get_value(c)), .init(xpc_int64_get_value(i)), .init(xpc_int64_get_value(o)))
                         if case.some(let r) = xpc_dictionary_create_reply($0), case.some(let p) = xpc_dictionary_get_remote_connection($0) {
                             xpc_connection_send_message(p, r)
                         }
@@ -43,9 +52,9 @@ extension External {
                 }
                 xpc_connection_activate($0)
             case XPC_TYPE_ERROR where $0.isEqual(XPC_ERROR_CONNECTION_INTERRUPTED):
-                os_log(.info, log: log, "%{public}@ dsp is interrupted", String(describing: External.self))
+                os_log(.info, log: log, "%{public}@ dsp is interrupted", String(describing: Object.self))
             case XPC_TYPE_ERROR where $0.isEqual(XPC_ERROR_CONNECTION_INVALID):
-                os_log(.info, log: log, "%{public}@ dsp becomes invalid", String(describing: External.self))
+                os_log(.info, log: log, "%{public}@ dsp becomes invalid", String(describing: Object.self))
                 if case.some(let ref) = xpc_connection_get_context(express) {
                     Unmanaged<xpc_connection_t>.fromOpaque(ref).release()
                 }
@@ -58,14 +67,14 @@ extension External {
         return xpc_endpoint_create(express)
     }
 }
-extension External {
+extension Service where Object: MAX.MC {
     @inlinable
     func msg(args: Array<Atom>) -> xpc_endpoint_t {
         let ingress = xpc_connection_create(.none, .some(msg))
         xpc_connection_set_event_handler(ingress) { [unowned ingress] in
             switch xpc_get_type($0) {
             case XPC_TYPE_CONNECTION:
-                let impress = MXO(args: args, notify: $0.notify(list:))
+                let impress = Object(args: args, notify: $0.notify(list:))
                 xpc_connection_set_event_handler($0) {
                     switch xpc_get_type($0) {
                     case XPC_TYPE_DICTIONARY:
@@ -126,7 +135,7 @@ extension External {
                                 let render = try impress.dsp(sampleRate: xpc_double_get_value(s), vectorSize: .init(xpc_int64_get_value(c)))
                                 let sᵢ = mᵢ.min() ?? .zero
                                 let sₒ = mₒ.min() ?? .zero
-                                xpc_dictionary_set_value(r, "=", dsp { i, o, start, count in
+                                xpc_dictionary_set_value(r, "=", dsp { start, count, i, o in
                                     withUnsafeTemporaryAllocation(of: Float64.self, capacity: (i + o) * count) {
                                         guard case.some(let window) = $0.baseAddress else { return }
                                         let base = start % period
@@ -137,9 +146,9 @@ extension External {
                                         let mᵢ = buffer.start.assumingMemoryBound(to: Float64.self).advanced(by: sᵢ)
                                         vDSP_mmovD(mᵢ.advanced(by: base), wᵢ, .init(head), .init(i), .init(period), .init(count))
                                         vDSP_mmovD(mᵢ, wᵢ.advanced(by: head), .init(tail), .init(i), .init(period), .init(count))
-                                        render(wᵢ, i, count,
-                                               wₒ, o, count,
-                                               start, count)
+                                        render(start, count,
+                                               wᵢ, i, count,
+                                               wₒ, o, count)
                                         let mₒ = buffer.start.assumingMemoryBound(to: Float64.self).advanced(by: sₒ)
                                         vDSP_mmovD(wₒ, mₒ.advanced(by: base), .init(head), .init(o), .init(count), .init(period))
                                         vDSP_mmovD(wₒ.advanced(by: head), mₒ, .init(tail), .init(o), .init(count), .init(period))
@@ -147,7 +156,7 @@ extension External {
                                 })
                             } catch {
                                 os_log(.error, log: log, "dsp error %{public}@", String(describing: error))
-                                xpc_dictionary_set_value(r, "=", dsp { i, o, start, count in
+                                xpc_dictionary_set_value(r, "=", dsp { start, count, i, o in
                                     let base = start % period
                                     let head = min(count, period - base)
                                     let tail = max(0, base + count - period)
@@ -225,9 +234,9 @@ extension External {
                 }
                 xpc_connection_activate($0)
             case XPC_TYPE_ERROR where $0.isEqual(XPC_ERROR_CONNECTION_INTERRUPTED):
-                os_log(.info, log: log, "%{public}@ msg is interrupted", String(describing: External.self))
+                os_log(.info, log: log, "%{public}@ msg is interrupted", String(describing: Object.self))
             case XPC_TYPE_ERROR where $0.isEqual(XPC_ERROR_CONNECTION_INVALID):
-                os_log(.info, log: log, "%{public}@ msg becomes invalid", String(describing: External.self))
+                os_log(.info, log: log, "%{public}@ msg becomes invalid", String(describing: Object.self))
                 if case.some(let ref) = xpc_connection_get_context(ingress) {
                     Unmanaged<xpc_connection_t>.fromOpaque(ref).release()
                 }
@@ -240,7 +249,7 @@ extension External {
         return xpc_endpoint_create(ingress)
     }
 }
-extension External {
+extension Service where Object: MAX.MC {
     @inlinable
     public init(as name: String, on queue: Optional<DispatchQueue> = .none) {
         log = .init(subsystem: name, category: .pointsOfInterest)
@@ -266,9 +275,9 @@ extension External {
                 }
                 xpc_connection_activate($0)
             case XPC_TYPE_ERROR where $0.isEqual(XPC_ERROR_CONNECTION_INTERRUPTED):
-                os_log(.debug, log: log, "%{public}@ is interrupted", String(describing: External.self))
+                os_log(.debug, log: log, "%{public}@ is interrupted", String(describing: Object.self))
             case XPC_TYPE_ERROR where $0.isEqual(XPC_ERROR_CONNECTION_INVALID):
-                os_log(.debug, log: log, "%{public}@ becomes invalid", String(describing: External.self))
+                os_log(.debug, log: log, "%{public}@ becomes invalid", String(describing: Object.self))
             default:
                 os_log(.debug, log: log, "%{public}@ is not handled @%d", String(describing: $0), #line)
             }
