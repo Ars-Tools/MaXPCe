@@ -5,33 +5,9 @@
 //  Created by Kota on 11/24/25.
 //
 import XPC
-public enum Atom: Sendable {
-    case Integer(Int64)
-    case FloatingPoint(Float64)
-    case Symbol(String)
-}
-extension Atom {
-    public static let Bang: Atom = .Symbol("bang")
-}
-extension Atom: ExpressibleByIntegerLiteral {
-    public init(integerLiteral value: Int64) {
-        self = .Integer(value)
-    }
-}
-extension Atom: ExpressibleByFloatLiteral {
-    public init(floatLiteral value: Float64) {
-        self = .FloatingPoint(value)
-    }
-}
-extension Atom: ExpressibleByStringLiteral {
-    public init(stringLiteral value: String) {
-        self = .Symbol(value)
-    }
-}
-extension Atom: Hashable & Equatable {
-    
-}
+import typealias MAX.Atom
 extension Atom: XPCObject {
+    @inlinable
     public init(xpc object: xpc_object_t) {
         switch xpc_get_type(object) {
         case XPC_TYPE_INT64:
@@ -41,9 +17,10 @@ extension Atom: XPCObject {
         case XPC_TYPE_STRING:
             self = .Symbol(.init(xpc: object))
         default:
-            preconditionFailure("Only Int64, Float64 and String can become Atom")
+            preconditionFailure("Only Int64, Float64 and String can become an Atom")
         }
     }
+    @inlinable
     public var xpc: xpc_object_t {
         switch self {
         case.Integer(let number):
