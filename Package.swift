@@ -9,8 +9,8 @@ let package = Package(
         .macOS(.v26)
     ],
     products: [
-        .library(name: "MaXPCe.MXO", targets: ["MXO"]),
-        .library(name: "MaXPCe.MXI", targets: ["MXI"]),
+        .library(name: "MXO", targets: ["MXO"]),
+        .library(name: "MXI", targets: ["MXI"]),
     ],
     targets: [
         .target(
