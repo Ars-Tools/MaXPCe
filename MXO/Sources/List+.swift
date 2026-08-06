@@ -5,16 +5,18 @@
 //  Created by Kota on 11/24/25.
 //
 import XPC
-public typealias List = Array<Atom>
+import typealias MAX.List
 extension Array where Element: XPCObject {
+    @inlinable
     public init(xpc object: xpc_object_t) {
         precondition(xpc_get_type(object) == XPC_TYPE_ARRAY)
         self.init()
         xpc_array_apply(object) {
-            self.append(.init(xpc: $1))
+            append(.init(xpc: $1))
             return true
         }
     }
+    @inlinable
     public var xpc: xpc_object_t {
         let object = xpc_array_create_empty()
         for atom in self {
@@ -29,8 +31,11 @@ extension Array where Element: BinaryInteger {
         self.init()
         xpc_array_apply(array) {
             precondition(xpc_get_type($1) == XPC_TYPE_INT64)
-            if case.some(let val) = Element(exactly: xpc_int64_get_value($1)) {
-                self.append(val)
+            switch Element(exactly: xpc_int64_get_value($1)) {
+            case.some(let val):
+                append(val)
+            case.none:
+                assertionFailure()
             }
             return true
         }
