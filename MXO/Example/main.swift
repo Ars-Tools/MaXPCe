@@ -6,5 +6,5 @@
 //
 import Dispatch
 import MXO
-withExtendedLifetime(External<SinSynth>(as: "xpc.mxo.server"), dispatchMain)
+withExtendedLifetime(Service<Thru>(as: "tools.ars.xpc.matrix"), dispatchMain)
 //withExtendedLifetime(External<SpeechRecognition>(as: "xpc.mxo.server"), dispatchMain)

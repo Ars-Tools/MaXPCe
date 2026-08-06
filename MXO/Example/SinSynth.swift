@@ -4,10 +4,11 @@
 //
 //  Created by Kota on 11/24/25.
 //
-import MXO
 import Synchronization
 import simd
-final class SinSynth: Internal, @unchecked Sendable {
+import MAX
+import MXO
+final class SinSynth: MAX.MC, @unchecked Sendable {
     var inputBusses: Array<Int> = [1]
     var outputBusses: Array<Int> = [4]
     var frequency: Float64 = 438
@@ -43,12 +44,12 @@ final class SinSynth: Internal, @unchecked Sendable {
             break
         }
     }
-    func dsp(sampleRate: Float64, vectorSize: Int) throws -> @Sendable(UnsafePointer<Float64>, Int, Int, UnsafeMutablePointer<Float64>, Int, Int, Int, Int) -> Void {
+    func dsp(sampleRate: Float64, vectorSize: Int) throws -> @Sendable(Int, Int, UnsafePointer<Float64>, Int, Int, UnsafeMutablePointer<Float64>, Int, Int) -> Void {
         notifier(["DSP Starts!"])
         return { [self]
+            CurrentTime, LengthToRender,
             In, InChannelCount, InChannelStride,
-            Out, OutChannelCount, OutChannelStride,
-            CurrentTime, LengthToRender in
+            Out, OutChannelCount, OutChannelStride in
             // Standard Sinewave
 //            for channel in 0..<OutChannelCount {
 //                for index in 0..<LengthToRender {
