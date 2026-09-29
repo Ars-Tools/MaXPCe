@@ -579,10 +579,12 @@ C74_HIDDEN void guard(t_xpc*const this, xpc_connection_t const proxy,
                       intptr_t const start, intptr_t const count) {
     { // guard available sample
         pthread_mutex_lock(&this->ar.guard.mutex);
+        intptr_t const samples = count * this->refer.guard;
+        uint64_t const sr = (uint64_t const)this->ar.freqs;
         while ( atomic_load_explicit(&this->ar.guard.count, memory_order_acquire) < count )
             if ( pthread_cond_timedwait_relative_np(&this->ar.guard.condv, &this->ar.guard.mutex, &(struct timespec) {
-                .tv_sec=0,
-                .tv_nsec=NSEC_PER_SEC/(this->ar.freqs/(count*this->refer.guard))
+                .tv_sec  = ( samples / sr ),
+                .tv_nsec = ( samples % sr ) * NSEC_PER_SEC / sr
             }) ) {
                 if ( this->refer.quiet < 1 )
                     object_error(this, "xpc dsp timedout, wider vector size might be better");
