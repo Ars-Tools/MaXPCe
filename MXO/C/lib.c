@@ -33,20 +33,17 @@ static inline xpc_object_t const xpc_array_create_atom(long const argc, t_atom c
             xpc_object_t __nonnull const val = xpc_int64_create(atom_getlong(arg));
             xpc_array_append_value(arr, val);
             xpc_release(val);
-            break;
-        }
+        } break;
         case A_FLOAT: {
             xpc_object_t __nonnull const val = xpc_double_create(atom_getfloat(arg));
             xpc_array_append_value(arr, val);
             xpc_release(val);
-            break;
-        }
+        } break;
         case A_SYM: {
             xpc_object_t __nonnull const val = xpc_string_create(atom_getsym(arg)->s_name);
             xpc_array_append_value(arr, val);
             xpc_release(val);
-            break;
-        }
+        } break;
     }
     return arr;
 }
@@ -97,16 +94,17 @@ C74_HIDDEN t_class const * class = NULL;
 __attribute__((__overloadable__, __always_inline__)) static inline
 C74_HIDDEN void out(t_xpc const*const this, xpc_object_t const args) {
     void * __nonnull const outlet = outlet_nth(this, outlet_count(this) - 1);
-    if ( args );
-    else if ( xpc_get_type(args) == XPC_TYPE_NULL )
+    xpc_type_t const type = xpc_get_type(args);
+    if ( !type );
+    else if ( type == XPC_TYPE_NULL )
         outlet_bang(outlet);
-    else if ( xpc_get_type(args) == XPC_TYPE_INT64 )
+    else if ( type == XPC_TYPE_INT64 )
         outlet_int(outlet, xpc_int64_get_value(args));
-    else if ( xpc_get_type(args) == XPC_TYPE_DOUBLE )
+    else if ( type == XPC_TYPE_DOUBLE )
         outlet_float(outlet, xpc_double_get_value(args));
-    else if ( xpc_get_type(args) == XPC_TYPE_STRING )
+    else if ( type == XPC_TYPE_STRING )
         outlet_anything(outlet, gensym(xpc_string_get_string_ptr(args)), 0, 0);
-    else if ( xpc_get_type(args) == XPC_TYPE_ARRAY ) {
+    else if ( type == XPC_TYPE_ARRAY ) {
         t_atom * __nonnull const argv = (t_atom*__nonnull const)sysmem_newptr(xpc_array_get_count(args) * sizeof(t_atom const));
         long const argc = xpc_array_parse(args, argv);
         outlet_list(outlet, gensym("list"), argc, argv);
@@ -123,7 +121,7 @@ C74_HIDDEN xpc_connection_t __nullable const kr_proxy_retained(t_xpc const*__non
 }
 
 __attribute__((__overloadable__, __always_inline__)) static inline
-C74_HIDDEN xpc_connection_t __nullable const kr_proxy_replace(t_xpc*__nonnull const this, xpc_connection_t __nullable const proxy) {
+C74_HIDDEN void kr_proxy_replace(t_xpc*__nonnull const this, xpc_connection_t __nullable const proxy) {
     os_unfair_lock_lock(&this->kr.ulock);
     if ( this->kr.proxy )
         xpc_release(this->kr.proxy);
