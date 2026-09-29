@@ -350,7 +350,6 @@ C74_HIDDEN void req(t_xpc const*__nonnull const this, void(^setup)(xpc_object_t 
     if ( proxy ) {
         xpc_object_t const req = xpc_dictionary_create_empty();
         setup(req);
-        xpc_connection_send_message(proxy, req);
         xpc_connection_send_message_with_reply(proxy, req, 0, ^(xpc_object_t __nonnull const res) {
             if ( xpc_get_type(res) == XPC_TYPE_DICTIONARY )
                 out(this, xpc_dictionary_get_value(res, "="));
