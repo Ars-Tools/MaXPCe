@@ -96,17 +96,17 @@ C74_HIDDEN t_class const * class = NULL;
 
 __attribute__((__overloadable__, __always_inline__)) static inline
 C74_HIDDEN void out(t_xpc const*const this, xpc_object_t const args) {
-    void*__nonnull const outlet = outlet_nth(this, outlet_count(this) - 1);
-    xpc_type_t const type = xpc_get_type(args);
-    if ( type == XPC_TYPE_NULL )
+    void * __nonnull const outlet = outlet_nth(this, outlet_count(this) - 1);
+    if ( args );
+    else if ( xpc_get_type(args) == XPC_TYPE_NULL )
         outlet_bang(outlet);
-    else if ( type == XPC_TYPE_INT64 )
+    else if ( xpc_get_type(args) == XPC_TYPE_INT64 )
         outlet_int(outlet, xpc_int64_get_value(args));
-    else if ( type == XPC_TYPE_DOUBLE )
+    else if ( xpc_get_type(args) == XPC_TYPE_DOUBLE )
         outlet_float(outlet, xpc_double_get_value(args));
-    else if ( type == XPC_TYPE_STRING )
+    else if ( xpc_get_type(args) == XPC_TYPE_STRING )
         outlet_anything(outlet, gensym(xpc_string_get_string_ptr(args)), 0, 0);
-    else if ( type == XPC_TYPE_ARRAY ) {
+    else if ( xpc_get_type(args) == XPC_TYPE_ARRAY ) {
         t_atom * __nonnull const argv = (t_atom*__nonnull const)sysmem_newptr(xpc_array_get_count(args) * sizeof(t_atom const));
         long const argc = xpc_array_parse(args, argv);
         outlet_list(outlet, gensym("list"), argc, argv);
@@ -148,7 +148,7 @@ C74_HIDDEN void ar_proxy_replace(t_xpc*__nonnull const this, xpc_connection_t __
     os_unfair_lock_unlock(&this->ar.ulock);
 }
 
-C74_HIDDEN void entry(t_xpc*__nonnull const this, t_symbol const*__nonnull const peer, long const argc, t_atom const*__nonnull const argv) {
+C74_HIDDEN void entry(t_xpc*__nonnull const this, t_symbol const*__nonnull const peer, short const argc, t_atom const*__nonnull const argv) {
     xpc_connection_t __nullable const proxy = kr_proxy_retained(this);
     if ( !proxy ) {
         xpc_connection_t const strap = xpc_connection_create_mach_service(peer->s_name, 0, 0);
@@ -398,53 +398,50 @@ C74_HIDDEN void list(t_xpc const*const this, t_symbol*__nonnull const msg, intpt
         xpc_release(arg);
     });
 }
-C74_HIDDEN void anything(t_xpc const*const this, t_symbol*__nonnull const msg, intptr_t const argc, t_atom const*__nonnull const argv) {
-    if ( argc )
-        list(this, msg, argc, argv);
-    else
-        symbol(this, msg);
-}
 C74_HIDDEN void set(t_xpc const*const this, t_symbol*__nonnull const msg, intptr_t const argc, t_atom const*__nonnull const argv) {
     switch ( argc ) {
         case 2:
             switch ( atom_gettype(argv+0) ) {
-                case A_SYM:
+                case A_SYM: {
                     switch ( atom_gettype(argv+1) ) {
                         case A_SYM:
                             xpc_dictionary_set_string(this->kr.store, atom_getsym(argv+0)->s_name, atom_getsym(argv+1)->s_name);
                             req(this, ^(xpc_object_t __nonnull const req) {
+                                xpc_object_t const arg = xpc_array_create_atom(argc, argv);
                                 xpc_dictionary_set_string(req, "/", "p");
                                 xpc_dictionary_set_string(req, "k", atom_getsym(argv+0)->s_name);
                                 xpc_dictionary_set_string(req, "v", atom_getsym(argv+1)->s_name);
+                                xpc_release(arg);
                             });
                             break;
                         case A_LONG:
                             xpc_dictionary_set_int64(this->kr.store, atom_getsym(argv+0)->s_name, atom_getlong(argv+1));
                             req(this, ^(xpc_object_t __nonnull const req) {
+                                xpc_object_t const arg = xpc_array_create_atom(argc, argv);
                                 xpc_dictionary_set_string(req, "/", "p");
                                 xpc_dictionary_set_string(req, "k", atom_getsym(argv+0)->s_name);
                                 xpc_dictionary_set_int64(req, "v", atom_getlong(argv+1));
+                                xpc_release(arg);
                             });
                             break;
                         case A_FLOAT:
                             xpc_dictionary_set_double(this->kr.store, atom_getsym(argv+0)->s_name, atom_getfloat(argv+1));
                             req(this, ^(xpc_object_t __nonnull const req) {
+                                xpc_object_t const arg = xpc_array_create_atom(argc, argv);
                                 xpc_dictionary_set_string(req, "/", "p");
                                 xpc_dictionary_set_string(req, "k", atom_getsym(argv+0)->s_name);
                                 xpc_dictionary_set_double(req, "v", atom_getfloat(argv+1));
+                                xpc_release(arg);
                             });
                             break;
                     }
-                    break;
+                    return;
+                }
             }
-            break;
         default:
             object_warn(this, "set [key] [value]");
             break;
     }
-}
-C74_HIDDEN void get(t_xpc const*const this, t_symbol*__nonnull const msg) {
-    out(this, xpc_dictionary_get_value(this->kr.store, msg->s_name));
 }
 __attribute__((__overloadable__))
 C74_HIDDEN void setup(t_xpc*const this) {
@@ -718,13 +715,11 @@ C74_EXPORT void ext_main(void*const _) {
         t_class * const object = (t_class*const)class_new("mc.xpc~", (method const)new, (method const)del, sizeof(t_xpc const), 0L, A_GIMME, 0);
         
         // MSG
+        class_addmethod(object, (method const)bang, "bang", 0);
+        class_addmethod(object, (method const)list, "list", A_GIMME, 0);
+        class_addmethod(object, (method const)set, "set", A_GIMME, 0);
         class_addmethod(object, (method const)fixnum, "int", A_LONG, 0);
         class_addmethod(object, (method const)fltnum, "float", A_FLOAT, 0);
-        class_addmethod(object, (method const)list, "list", A_GIMME, 0);
-        class_addmethod(object, (method const)bang, "bang", 0);
-        class_addmethod(object, (method const)set, "set", A_GIMME, 0);
-        class_addmethod(object, (method const)get, "get", A_SYM, 0);
-        class_addmethod(object, (method const)anything, "anything", A_GIMME, 0);
         
         // DSP
         class_addmethod(object, (method const)dsp64, "dsp64", A_CANT, 0);
