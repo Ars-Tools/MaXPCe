@@ -203,7 +203,7 @@ extension Service where Object: MAX.MC {
                         case.some("f"): // floatingPoint
                             guard
                                 case.some(let b) = xpc_dictionary_get_value($0, "#"), xpc_get_type(b) == XPC_TYPE_INT64,
-                                case.some(let v) = xpc_dictionary_get_value($0, "="), xpc_get_type(v) == XPC_TYPE_FLOAT64 else { break }
+                                case.some(let v) = xpc_dictionary_get_value($0, "="), xpc_get_type(v) == XPC_TYPE_DOUBLE else { break }
                             impress.number(at: .init(xpc_int64_get_value(b)), value: xpc_double_get_value(v))
                             if case.some(let r) = xpc_dictionary_create_reply($0), case.some(let p) = xpc_dictionary_get_remote_connection($0) {
                                 xpc_connection_send_message(p, r)
