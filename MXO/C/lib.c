@@ -218,54 +218,6 @@ C74_HIDDEN void del(t_xpc const*__nonnull const this) {
     if ( this->ar.start && this->ar.bytes )
         munmap(this->ar.start, this->ar.bytes);
 }
-
-C74_HIDDEN t_xpc const*const new(t_symbol*__nonnull const symbol, long const argc, t_atom const * __nonnull const argv) {
-    intptr_t const offset = attr_args_offset(argc, argv);
-    if ( offset < 1 ) {
-        error("%s less argument", class->c_sym->s_name);
-        return 0;
-    } else if ( atom_gettype(argv) != A_SYM ) {
-        error("%s invalid argument", class->c_sym->s_name);
-        return 0;
-    } else {
-        register t_xpc * object = (t_xpc*const)object_alloc((t_class*const)class);
-        *(os_unfair_lock*__nonnull const)&object->kr.ulock = OS_UNFAIR_LOCK_INIT;
-        *(os_unfair_lock*__nonnull const)&object->ar.ulock = OS_UNFAIR_LOCK_INIT;
-        pthread_mutex_init(&object->ar.guard.mutex, 0);
-        pthread_cond_init(&object->ar.guard.condv, 0);
-        
-        attr_args_process(object, argc - offset, argv + offset);
-        outlet_new(object, 0);
-        
-        *(xpc_object_t __nonnull*__nonnull const)&object->kr.store = xpc_dictionary_create_empty();
-        entry(object, atom_getsym(argv), offset, argv);
-        
-        xpc_object_t __nullable const proxy = kr_proxy_retained(object);
-        
-        if ( proxy ) {
-            xpc_object_t const req = xpc_dictionary_create_empty();
-            xpc_dictionary_set_string(req, "/", ":");
-            
-            xpc_object_t const res = xpc_connection_send_message_with_reply_sync(proxy, req);
-            
-            z_dsp_setup(object, xpc_dictionary_get_int64(res, "i"));
-            ((t_pxobject*__nonnull const)&object->super)->z_misc |= Z_MC_INLETS;
-            for ( register intptr_t k = 0, K = xpc_dictionary_get_int64(res, "o") ; k < K ; ++ k )
-                outlet_new(object, "multichannelsignal");
-            
-            xpc_release(res);
-            xpc_release(req);
-            xpc_release(proxy);
-            
-            return object;
-        } else {
-            object_error(object, "connection is not established");
-            del(object);
-            return 0;
-        }
-        
-    }
-}
 C74_HIDDEN void assist(t_xpc const*const this, void const*const _, long const scope, long const index, char * string) {
     xpc_object_t __nullable const proxy = kr_proxy_retained(this);
     if ( proxy ) {
@@ -290,25 +242,12 @@ C74_HIDDEN void assist(t_xpc const*const this, void const*const _, long const sc
     }
 }
 C74_HIDDEN void dblclick(t_xpc const*__nonnull const this) {
-    intptr_t const len = 4096;
-    char * __nonnull const msg = sysmem_newptrclear(len);
+    char msg[16] = {0};
     xpc_connection_t __nullable const kr = kr_proxy_retained(this);
+    if (kr)
+        xpc_release(kr);
     sprintf(msg, "connection: %s\r\n", kr ? "OK" : "NO");
-    xpc_release(kr);
-    xpc_dictionary_apply(this->kr.store, ^bool(char const * __nonnull const key, xpc_object_t __nonnull const value) {
-        char reg[64];
-        if ( !value );
-        else if ( xpc_get_type(value) == XPC_TYPE_INT64 )
-            snprintf(reg, sizeof(reg), "%s: %lld\r\n", key, xpc_int64_get_value(value));
-        else if ( xpc_get_type(value) == XPC_TYPE_DOUBLE )
-            snprintf(reg, sizeof(reg), "%s: %lf\r\n", key, xpc_double_get_value(value));
-        else if ( xpc_get_type(value) == XPC_TYPE_STRING )
-            snprintf(reg, sizeof(reg), "%s: %s\r\n", key, xpc_string_get_string_ptr(value));
-        strncat(msg, reg, len - strnlen(msg, len) - 1);
-        return true;
-    });
     object_post(this, "%s", msg);
-    sysmem_freeptr(msg);
 }
 C74_HIDDEN long input(t_xpc const*const this, long const index, long const count) {
     xpc_object_t __nullable const proxy = kr_proxy_retained(this);
@@ -395,49 +334,182 @@ C74_HIDDEN void list(t_xpc const*const this, t_symbol*__nonnull const msg, intpt
         xpc_release(arg);
     });
 }
-C74_HIDDEN void set(t_xpc const*const this, t_symbol*__nonnull const msg, intptr_t const argc, t_atom const*__nonnull const argv) {
+C74_HIDDEN void set(t_xpc const * __nonnull const this, t_symbol * __nonnull const key, t_atom const * value) {
+    switch (atom_gettype(value)) {
+        case A_SYM:
+            xpc_dictionary_set_string(this->kr.store, key->s_name, atom_getsym(value)->s_name);
+            req(this, ^(xpc_object_t __nonnull const req) {
+                xpc_dictionary_set_string(req, "/", "p");
+                xpc_dictionary_set_string(req, "k", key->s_name);
+                xpc_dictionary_set_string(req, "v", atom_getsym(value)->s_name);
+            });
+            break;
+        case A_LONG:
+            xpc_dictionary_set_int64(this->kr.store, key->s_name, atom_getlong(value));
+            req(this, ^(xpc_object_t __nonnull const req) {
+                xpc_dictionary_set_string(req, "/", "p");
+                xpc_dictionary_set_string(req, "k", key->s_name);
+                xpc_dictionary_set_int64(req, "v", atom_getlong(value));
+            });
+            break;
+        case A_FLOAT:
+            xpc_dictionary_set_double(this->kr.store, key->s_name, atom_getfloat(value));
+            req(this, ^(xpc_object_t __nonnull const req) {
+                xpc_dictionary_set_string(req, "/", "p");
+                xpc_dictionary_set_string(req, "k", key->s_name);
+                xpc_dictionary_set_double(req, "v", atom_getfloat(value));
+            });
+            break;
+    }
+}
+C74_HIDDEN t_max_err getter(t_xpc const*__nonnull const this, t_object*__nonnull const attr, long * __nonnull argc, t_atom **__nonnull argv) {
+    t_symbol * __nonnull const key = object_method(attr, gensym("getname"));
+    if (!key) return MAX_ERR_GENERIC;
+    xpc_object_t _Nullable const value = xpc_dictionary_get_value(this->kr.store, key->s_name);
+    if (!value) return MAX_ERR_GENERIC;
+    xpc_type_t const type = xpc_get_type(value);
+    if (!type) return MAX_ERR_GENERIC;
+    else if ( type == XPC_TYPE_INT64 ) {
+        if (*argc<1||!*argv)
+            *argv = getbytes(sizeof(t_atom));
+        if (!*argv) return MAX_ERR_OUT_OF_MEM;
+        atom_setlong(*argv, xpc_int64_get_value(value));
+        *argc = 1;
+    }
+    else if ( type == XPC_TYPE_DOUBLE ) {
+        if (*argc<1||!*argv)
+            *argv = getbytes(sizeof(t_atom));
+        if (!*argv) return MAX_ERR_OUT_OF_MEM;
+        atom_setfloat(*argv, xpc_double_get_value(value));
+        *argc = 1;
+    }
+    else if ( type == XPC_TYPE_STRING ) {
+        if (*argc<1||!*argv)
+            *argv = getbytes(sizeof(t_atom));
+        if (!*argv) return MAX_ERR_OUT_OF_MEM;
+        atom_setsym(*argv, gensym(xpc_string_get_string_ptr(value)));
+        *argc = 1;
+    }
+    return MAX_ERR_NONE;
+}
+C74_HIDDEN t_max_err setter(t_xpc const*__nonnull const this, t_object*__nonnull const attr, long const argc, t_atom *__nullable const argv) {
+    if (argc!=1||!argv) return MAX_ERR_GENERIC;
+    t_symbol * __nonnull const key = object_method(attr, gensym("getname"));
+    if (!key) return MAX_ERR_GENERIC;
+    set(this, key, argv);
+    return MAX_ERR_NONE;
+}
+C74_HIDDEN void attr(t_xpc const*const this, t_symbol*__nonnull const msg, intptr_t const argc, t_atom const*__nonnull const argv) {
     switch ( argc ) {
-        case 2:
-            switch ( atom_gettype(argv+0) ) {
-                case A_SYM: {
-                    switch ( atom_gettype(argv+1) ) {
-                        case A_SYM:
-                            xpc_dictionary_set_string(this->kr.store, atom_getsym(argv+0)->s_name, atom_getsym(argv+1)->s_name);
-                            req(this, ^(xpc_object_t __nonnull const req) {
-                                xpc_object_t const arg = xpc_array_create_atom(argc, argv);
-                                xpc_dictionary_set_string(req, "/", "p");
-                                xpc_dictionary_set_string(req, "k", atom_getsym(argv+0)->s_name);
-                                xpc_dictionary_set_string(req, "v", atom_getsym(argv+1)->s_name);
-                                xpc_release(arg);
-                            });
-                            break;
-                        case A_LONG:
-                            xpc_dictionary_set_int64(this->kr.store, atom_getsym(argv+0)->s_name, atom_getlong(argv+1));
-                            req(this, ^(xpc_object_t __nonnull const req) {
-                                xpc_object_t const arg = xpc_array_create_atom(argc, argv);
-                                xpc_dictionary_set_string(req, "/", "p");
-                                xpc_dictionary_set_string(req, "k", atom_getsym(argv+0)->s_name);
-                                xpc_dictionary_set_int64(req, "v", atom_getlong(argv+1));
-                                xpc_release(arg);
-                            });
-                            break;
-                        case A_FLOAT:
-                            xpc_dictionary_set_double(this->kr.store, atom_getsym(argv+0)->s_name, atom_getfloat(argv+1));
-                            req(this, ^(xpc_object_t __nonnull const req) {
-                                xpc_object_t const arg = xpc_array_create_atom(argc, argv);
-                                xpc_dictionary_set_string(req, "/", "p");
-                                xpc_dictionary_set_string(req, "k", atom_getsym(argv+0)->s_name);
-                                xpc_dictionary_set_double(req, "v", atom_getfloat(argv+1));
-                                xpc_release(arg);
-                            });
-                            break;
-                    }
-                    return;
+        case 1: { // attr [key]
+            if ( atom_gettype(argv) != A_SYM ) return;
+            t_symbol * __nonnull const key = atom_getsym(argv);
+            if (xpc_dictionary_get_value(this->kr.store, key->s_name)) {
+                xpc_dictionary_set_value(this->kr.store, key->s_name, NULL);
+                if (object_attr_get(this, key)) {
+                    object_deleteattr(this, key);
                 }
             }
-        default:
-            object_warn(this, "set [key] [value]");
+        } break;
+        case 2: { // attr [key] [value]
+            if ( atom_gettype(argv) != A_SYM ) return;
+            t_symbol * __nonnull const key = atom_getsym(argv);
+            switch (atom_gettype(argv+1)) {
+                case A_SYM:
+                    if (!object_attr_get(this, key)) {
+                        t_object * _Nullable const attr = attr_offset_new(key->s_name, gensym("symbol"), 0, (method const)getter, (method const)setter, 0);
+                        if (attr) {
+                            switch (object_addattr(this, attr)) {
+                                case MAX_ERR_NONE:
+                                    set(this, key, argv+1);
+                                    break;
+                                default:
+                                    object_free(attr);
+                            }
+                        }
+                    } else if (xpc_dictionary_get_value(this->kr.store, key->s_name))
+                        set(this, key, argv+1);
+                    break;
+                case A_LONG:
+                    if (!object_attr_get(this, key)) {
+                        t_object * _Nullable const attr = attr_offset_new(key->s_name, gensym("long"), 0, (method const)getter, (method const)setter, 0);
+                        if (attr) {
+                            switch (object_addattr(this, attr)) {
+                                case MAX_ERR_NONE:
+                                    set(this, key, argv+1);
+                                    break;
+                                default:
+                                    object_free(attr);
+                            }
+                        }
+                    } else if (xpc_dictionary_get_value(this->kr.store, key->s_name))
+                        set(this, key, argv+1);
+                    break;
+                case A_FLOAT:
+                    if (!object_attr_get(this, key)) {
+                        t_object * _Nullable const attr = attr_offset_new(key->s_name, gensym("float64"), 0, (method const)getter, (method const)setter, 0);
+                        if (attr) {
+                            switch (object_addattr(this, attr)) {
+                                case MAX_ERR_NONE:
+                                    set(this, key, argv+1);
+                                    break;
+                                default:
+                                    object_free(attr);
+                                    break;
+                            }
+                        }
+                    } else if (xpc_dictionary_get_value(this->kr.store, key->s_name))
+                        set(this, key, argv+1);
+                    break;
+            }
+        } break;
+    }
+}
+C74_HIDDEN void restorefromdictionary(t_xpc const*__nonnull const this) {
+    t_dictionary * warehouse = gensym("#D")->s_thing;
+    if (!warehouse) return;
+    t_dictionary * storage;
+    switch (dictionary_getdictionary(gensym("#D")->s_thing, gensym("mc.xpc~.storage"), &storage)) {
+        case MAX_ERR_NONE:
             break;
+        default:
+            return;
+    }
+    t_atom argv[2];
+    long numkeys = 0;
+    t_symbol ** keys = NULL;
+    switch (dictionary_getkeys(storage, &numkeys, &keys)) {
+        case MAX_ERR_NONE:
+            for ( intptr_t k = 0 ; k < numkeys ; ++ k )
+                switch (dictionary_getatom(storage, keys[k], argv+1)) {
+                    case MAX_ERR_NONE:
+                        atom_setsym(argv, keys[k]);
+                        attr(this, gensym("attr"), 2, argv);
+                        break;
+                }
+            dictionary_freekeys(storage, numkeys, keys);
+            break;
+    }
+}
+C74_HIDDEN void appendtodictionary(t_xpc const*__nonnull const this, t_dictionary *__nonnull const warehouse) {
+    t_dictionary * _Nullable storage = dictionary_new();
+    if (!storage) return;
+    xpc_dictionary_apply(this->kr.store, ^bool(const char *key, xpc_object_t const value) {
+        xpc_type_t type = xpc_get_type(value);
+        if ( !type ) return false;
+        else if (type == XPC_TYPE_INT64)
+            dictionary_appendlong(storage, gensym(key), xpc_int64_get_value(value));
+        else if (type == XPC_TYPE_DOUBLE)
+            dictionary_appendfloat(storage, gensym(key), xpc_double_get_value(value));
+        else if (type == XPC_TYPE_STRING)
+            dictionary_appendsym(storage, gensym(key), gensym(xpc_string_get_string_ptr(value)));
+        return true;
+    });
+    switch (dictionary_appenddictionary(warehouse, gensym("mc.xpc~.storage"), storage)) {
+        case MAX_ERR_NONE:
+            break;
+        default:
+            object_free(storage);
     }
 }
 __attribute__((__overloadable__))
@@ -708,6 +780,54 @@ C74_HIDDEN void dsp64(t_xpc*const this, t_object const*const dsp64, long const*c
               (t_perfroutine64 const)guard :
               (t_perfroutine64 const)async);
 }
+C74_HIDDEN t_xpc const*const new(t_symbol*__nonnull const symbol, long const argc, t_atom const * __nonnull const argv) {
+    intptr_t const offset = attr_args_offset(argc, argv);
+    if ( offset < 1 ) {
+        error("%s less argument", class->c_sym->s_name);
+        return 0;
+    } else if ( atom_gettype(argv) != A_SYM ) {
+        error("%s invalid argument", class->c_sym->s_name);
+        return 0;
+    } else {
+        register t_xpc * object = (t_xpc*const)object_alloc((t_class*const)class);
+        *(os_unfair_lock*__nonnull const)&object->kr.ulock = OS_UNFAIR_LOCK_INIT;
+        *(os_unfair_lock*__nonnull const)&object->ar.ulock = OS_UNFAIR_LOCK_INIT;
+        pthread_mutex_init(&object->ar.guard.mutex, 0);
+        pthread_cond_init(&object->ar.guard.condv, 0);
+        
+        attr_args_process(object, argc - offset, argv + offset);
+        outlet_new(object, 0);
+        
+        *(xpc_object_t __nonnull*__nonnull const)&object->kr.store = xpc_dictionary_create_empty();
+        restorefromdictionary(object);
+        entry(object, atom_getsym(argv), offset, argv);
+        
+        xpc_object_t __nullable const proxy = kr_proxy_retained(object);
+        
+        if ( proxy ) {
+            xpc_object_t const req = xpc_dictionary_create_empty();
+            xpc_dictionary_set_string(req, "/", ":");
+            
+            xpc_object_t const res = xpc_connection_send_message_with_reply_sync(proxy, req);
+            
+            z_dsp_setup(object, xpc_dictionary_get_int64(res, "i"));
+            ((t_pxobject*__nonnull const)&object->super)->z_misc |= Z_MC_INLETS;
+            for ( register intptr_t k = 0, K = xpc_dictionary_get_int64(res, "o") ; k < K ; ++ k )
+                outlet_new(object, "multichannelsignal");
+            
+            xpc_release(res);
+            xpc_release(req);
+            xpc_release(proxy);
+            
+            return object;
+        } else {
+            object_error(object, "connection is not established");
+            del(object);
+            return 0;
+        }
+        
+    }
+}
 C74_EXPORT void ext_main(void*const _) {
     if (!class) {
         //
@@ -716,7 +836,7 @@ C74_EXPORT void ext_main(void*const _) {
         // MSG
         class_addmethod(object, (method const)bang, "bang", 0);
         class_addmethod(object, (method const)list, "list", A_GIMME, 0);
-        class_addmethod(object, (method const)set, "set", A_GIMME, 0);
+        class_addmethod(object, (method const)attr, "attr", A_GIMME, 0);
         class_addmethod(object, (method const)fixnum, "int", A_LONG, 0);
         class_addmethod(object, (method const)fltnum, "float", A_FLOAT, 0);
         
@@ -734,6 +854,7 @@ C74_EXPORT void ext_main(void*const _) {
         class_addmethod(object, (method const)dblclick, "dblclick", A_CANT, 0);
         class_addmethod(object, (method const)input, "inputchanged", A_CANT, 0);
         class_addmethod(object, (method const)output, "multichanneloutputs", A_CANT, 0);
+        class_addmethod(object, (method const)appendtodictionary, "appendtodictionary", A_CANT, 0);
         
         // DSP Initialisation
         class_dspinit(object);
