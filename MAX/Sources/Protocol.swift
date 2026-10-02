@@ -16,7 +16,7 @@ public protocol EO: Sendable {
     func symbol(at inlet: Int, value: String)
     func number(at inlet: Int, value: Int64)
     func number(at inlet: Int, value: Float64)
-    func set(value: Atom, for key: String)
+    func set(value: Atom, for attribute: String)
 }
 extension EO { // default methods
     public func description(for terminal: Terminal) -> String { "" }
@@ -25,7 +25,7 @@ extension EO { // default methods
     public func symbol(at inlet: Int, value: String) {}
     public func number(at inlet: Int, value: Int64) {}
     public func number(at inlet: Int, value: Float64) {}
-    public func set(value: Atom, for key: String) {}
+    public func set(value: Atom, for attribute: String) {}
 }
 public protocol MC: EO {
     var inputBusses: Array<Int> { get nonmutating set }
