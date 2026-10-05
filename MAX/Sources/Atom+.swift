@@ -11,11 +11,15 @@ extension Atom: _ObjectiveCBridgeable {
     public func _bridgeToObjectiveC() -> _ObjectiveCType {
         switch self {
         case.Integer(let number):
-            number as CFNumber
+            withUnsafeBytes(of: number) {
+                CFNumberCreate(kCFAllocatorDefault, .sInt64Type, $0.baseAddress)
+            }
         case.FloatingPoint(let number):
-            number as CFNumber
+            withUnsafeBytes(of: number) {
+                CFNumberCreate(kCFAllocatorDefault, .float64Type, $0.baseAddress)
+            }
         case.Symbol(let symbol):
-            symbol as CFString
+            CFStringCreateWithCString(kCFAllocatorDefault, symbol, .init(CFStringBuiltInEncodings.UTF8.rawValue))
         }
     }
     @inlinable

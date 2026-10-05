@@ -29,10 +29,10 @@ struct AtomTestCases {
     }
     @Test
     func cfstring() {
-        let x = "10" as Atom
+        let x = "🤖" as Atom
         let y = x as!NSString
         #expect(CFGetTypeID(y) == CFStringGetTypeID())
-        #expect(y == NSString(string: "10"))
+        #expect(y == NSString(string: "🤖"))
         let z = y as Atom
         #expect(z == x)
     }
