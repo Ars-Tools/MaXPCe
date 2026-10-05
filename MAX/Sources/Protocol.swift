@@ -19,9 +19,9 @@ public protocol EO: Sendable {
     func set(value: Atom, for attribute: String)
 }
 extension EO { // default methods
-    public func description(for terminal: Terminal) -> String { "" }
+    public func description(for terminal: Terminal) -> String { .init() }
     public func bang(at inlet: Int) {}
-    public func list(at inlet: Int, value: Array<Atom>) -> Array<Atom> { [] }
+    public func list(at inlet: Int, value: Array<Atom>) -> Array<Atom> { .init() }
     public func symbol(at inlet: Int, value: String) {}
     public func number(at inlet: Int, value: Int64) {}
     public func number(at inlet: Int, value: Float64) {}
