@@ -1,10 +1,14 @@
 #include"ext.h"
 #include"z_dsp.h"
+#include"buffer.h"
+#include"ext_buffer.h"
 #include<errno.h>
 #include<pthread.h>
 #include<stdatomic.h>
 #include<xpc/xpc.h>
 #include<os/lock.h>
+#include<simd/simd.h>
+#include<Accelerate/Accelerate.h>
 
 // MARK: Helpers
 
@@ -242,7 +246,7 @@ C74_HIDDEN void assist(t_xpc const*const this, void const*const _, long const sc
     }
 }
 C74_HIDDEN void dblclick(t_xpc const*__nonnull const this) {
-    char msg[16] = {0};
+    char msg[64] = {0};
     xpc_connection_t __nullable const kr = kr_proxy_retained(this);
     if (kr)
         xpc_release(kr);
@@ -332,6 +336,86 @@ C74_HIDDEN void list(t_xpc const*const this, t_symbol*__nonnull const msg, intpt
         xpc_dictionary_set_int64(req, "#", proxy_getinlet(this));
         xpc_dictionary_set_value(req, "=", arg);
         xpc_release(arg);
+    });
+}
+C74_HIDDEN void buffer_lock_info(t_xpc const*const this, t_symbol const * __nonnull const value, bool(^body)(t_buffer_info const info)) {
+    t_buffer_ref * _Nullable const ref = buffer_ref_new(this, value);
+    if ( ref ) {
+        t_buffer_obj * _Nullable const obj = buffer_ref_getobject(ref);
+        if ( obj ) {
+            bool dirty = false;
+            t_buffer_info info = {0};
+            switch ( buffer_lock(obj) ) {
+                case MAX_ERR_NONE:
+                    switch ( buffer_getinfo(obj, &info) ) {
+                        case MAX_ERR_NONE:
+                            dirty |= body(info);
+                            break;
+                    }
+                    buffer_unlock(obj);
+                    break;
+            }
+            if (dirty)
+                buffer_setdirty(obj);
+        }
+        object_free(ref);
+    }
+}
+C74_HIDDEN void buffer(t_xpc const*const this, t_symbol const * __nonnull const value) {
+    buffer_lock_info(this, value, ^bool(t_buffer_info const info) {
+        int64_t const row = info.b_nchans;
+        int64_t const col = info.b_frames;
+        xpc_connection_t const proxy = kr_proxy_retained(this);
+        if ( proxy ) {
+            double * _Nullable const mem = mmap(0, row * col * sizeof(double const), PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_SHARED, -1, 0);
+            if ( mem != MAP_FAILED ) {
+                xpc_object_t _Nullable const xpc = xpc_shmem_create(mem, row * col * sizeof(double const));
+                if ( !xpc )
+                    munmap(mem, row * col * sizeof(double const));
+                else {
+                    for ( intptr_t k = 0 ; k < row ; ++ k )
+                        vDSP_vspdp((info.b_samples) + k * 1, row,
+                                   (mem           ) + k * col, 1,
+                                   (col));
+                    xpc_object_t const arg = xpc_dictionary_create_empty();
+                    xpc_dictionary_set_string(arg, "n", info.b_name->s_name);
+                    xpc_dictionary_set_double(arg, "f", info.b_sr);
+                    xpc_dictionary_set_int64(arg, "r", row);
+                    xpc_dictionary_set_int64(arg, "c", col);
+                    xpc_dictionary_set_value(arg, "m", xpc);
+                    xpc_dictionary_set_int64(arg, "l", col); // leading size
+                    xpc_object_t const req = xpc_dictionary_create_empty();
+                    xpc_dictionary_set_string(req, "/", "w");
+                    xpc_dictionary_set_int64(req, "#", proxy_getinlet(this));
+                    xpc_dictionary_set_value(req, "=", arg);
+                    xpc_connection_send_message_with_reply(proxy, req, 0, ^void(xpc_object_t __nonnull const res) {
+                        if ( xpc_get_type(res) == XPC_TYPE_DICTIONARY ) {
+                            xpc_object_t const wav = xpc_dictionary_get_dictionary(res, "=");
+                            if ( wav ) {
+                                int64_t const r = MAX(0, xpc_dictionary_get_int64(wav, "r"));
+                                int64_t const R = MIN(xpc_dictionary_get_int64(wav, "R"), row);
+                                int64_t const c = MAX(0, xpc_dictionary_get_int64(wav, "c"));
+                                int64_t const C = MIN(xpc_dictionary_get_int64(wav, "C"), col);
+                                if ( simd_all(simd_make_long2(r, c) < simd_make_long2(R, C)) ) buffer_lock_info(this, value, ^bool(t_buffer_info const info) {
+                                    bool const valid = simd_all(simd_make_long2(row, col) == simd_make_long2(info.b_nchans, info.b_frames));
+                                    if ( valid ) for ( intptr_t k = r ; k < R ; ++ k )
+                                        vDSP_vdpsp((mem            + c * 1  ) + k * col, 1,
+                                                   (info.b_samples + c * row) + k * 1, row,
+                                                   (C - c));
+                                    return valid;
+                                });
+                            }
+                        }
+                        xpc_release(xpc);
+                        munmap(mem, row * col * sizeof(double const));
+                    });
+                    xpc_release(req);
+                    xpc_release(arg);
+                }
+            }
+            xpc_release(proxy);
+        }
+        return false;
     });
 }
 C74_HIDDEN void set(t_xpc const * __nonnull const this, t_symbol * __nonnull const key, t_atom const * value) {
@@ -839,6 +923,7 @@ C74_EXPORT void ext_main(void*const _) {
         class_addmethod(object, (method const)attr, "attr", A_GIMME, 0);
         class_addmethod(object, (method const)fixnum, "int", A_LONG, 0);
         class_addmethod(object, (method const)fltnum, "float", A_FLOAT, 0);
+        class_addmethod(object, (method const)buffer, "buffer", A_SYM, 0);
         
         // DSP
         class_addmethod(object, (method const)dsp64, "dsp64", A_CANT, 0);
