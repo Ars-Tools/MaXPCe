@@ -5,8 +5,9 @@
 //  Created by Kota on 11/24/25.
 //
 import XPC
-public final class Buffer: @unchecked Sendable, XPCObject {
+public final class Buffer: Sendable, XPCObject {
     @usableFromInline
+    nonisolated(unsafe)
     let start: UnsafeMutableRawPointer
     @usableFromInline
     let count: Int
@@ -18,9 +19,9 @@ public final class Buffer: @unchecked Sendable, XPCObject {
         start = unsafeBitCast(`catch`, to: UnsafeMutableRawPointer.self)
     }
     @inlinable
-    public init() {
-        start = unsafeBitCast(Optional<UnsafeMutableRawPointer>.none, to: UnsafeMutableRawPointer.self)
-        count = 0
+    public init<T: BitwiseCopyable>(_ elements: some Collection<T>) {
+        count = elements.count * MemoryLayout<T>.stride
+        start = mmap(.none, count, PROT_READ|PROT_WRITE, MAP_ANON|MAP_SHARED, -1, 0)
     }
     deinit {
         munmap(start, count)
