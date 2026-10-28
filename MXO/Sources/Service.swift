@@ -225,6 +225,33 @@ extension Service where Object: MAX.MC {
                                 xpc_dictionary_set_value(r, "=", result.xpc)
                                 xpc_connection_send_message(p, r)
                             }
+                        case.some("w"): // buffer (set)
+                            guard
+                                case.some(let b) = xpc_dictionary_get_value($0, "#"), xpc_get_type(b) == XPC_TYPE_INT64,
+                                case.some(let v) = xpc_dictionary_get_value($0, "="), xpc_get_type(v) == XPC_TYPE_DICTIONARY,
+                                case.some(let n) = xpc_dictionary_get_value(v, "n"), xpc_get_type(n) == XPC_TYPE_STRING,
+                                case.some(let f) = xpc_dictionary_get_value(v, "f"), xpc_get_type(f) == XPC_TYPE_DOUBLE,
+                                case.some(let s) = xpc_dictionary_get_value(v, "r"), xpc_get_type(s) == XPC_TYPE_INT64,
+                                case.some(let c) = xpc_dictionary_get_value(v, "c"), xpc_get_type(c) == XPC_TYPE_INT64,
+                                case.some(let m) = xpc_dictionary_get_value(v, "m"), xpc_get_type(m) == XPC_TYPE_SHMEM,
+                                case.some(let l) = xpc_dictionary_get_value(v, "l"), xpc_get_type(l) == XPC_TYPE_INT64 else { break }
+                            let u = Buffer(xpc: m).withUnsafeMutableBufferPointer {
+                                impress.buffer(name: .init(xpc: n),
+                                               rate: xpc_double_get_value(f),
+                                               rows: .init(xpc_int64_get_value(s)),
+                                               cols: .init(xpc_int64_get_value(c)),
+                                               buffer: $0,
+                                               stride: .init(xpc_int64_get_value(l)))
+                            }
+                            if case.some(let r) = xpc_dictionary_create_reply($0), case.some(let p) = xpc_dictionary_get_remote_connection($0) {
+                                let w = xpc_dictionary_create_empty()
+                                xpc_dictionary_set_int64(w, "r", .init(u.0.lowerBound))
+                                xpc_dictionary_set_int64(w, "R", .init(u.0.upperBound))
+                                xpc_dictionary_set_int64(w, "c", .init(u.1.lowerBound))
+                                xpc_dictionary_set_int64(w, "C", .init(u.1.upperBound))
+                                xpc_dictionary_set_value(r, "=", w)
+                                xpc_connection_send_message(p, r)
+                            }
                         default:
                             os_log(.debug, log: log, "%{public}@ is not handled @%d", String(describing: $0), #line)
                         }
