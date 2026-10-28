@@ -17,6 +17,8 @@ public protocol EO: Sendable {
     func number(at inlet: Int, value: Int64)
     func number(at inlet: Int, value: Float64)
     func set(value: Atom, for attribute: String)
+    // provide buffer memory with channel-major (planar) layout, notify update range to notify update the buffer
+    func buffer(name: String, rate: Float64, rows: Int, cols: Int, buffer: UnsafeMutableBufferPointer<Float64>, stride: Int) -> (Range<Int>, Range<Int>)
 }
 extension EO { // default methods
     public func description(for terminal: Terminal) -> String { .init() }
@@ -26,6 +28,9 @@ extension EO { // default methods
     public func number(at inlet: Int, value: Int64) {}
     public func number(at inlet: Int, value: Float64) {}
     public func set(value: Atom, for attribute: String) {}
+    public func buffer(name: String, rate: Float64, rows: Int, cols: Int, buffer: UnsafeMutableBufferPointer<Float64>, stride: Int) -> (Range<Int>, Range<Int>) {
+        (0..<rows, 0..<cols)
+    }
 }
 public protocol MC: EO {
     var inputBusses: Array<Int> { get nonmutating set }
