@@ -816,53 +816,58 @@ C74_HIDDEN void routine64(t_xpc*const this, t_object const*const dsp64,
 }
 C74_HIDDEN void dsp64(t_xpc*const this, t_object const*const dsp64, long const*const count, double const sampleRate, long const vectorSize, long const flags) {
     C74_ASSERT(systhread_ismainthread())
+    bool connected = false;
+    for ( long const * k = count, * const K = k + inlet_count(this) + outlet_count(this) - 1 ; k < K ; ++ k )
+        connected |= !!*k;
     
-    this->ar.freqs = sampleRate;
-    this->ar.cycle = ( this->ar.frame = vectorSize ) + this->refer.delay; // in sample
-    
-    if ( this->ar.start )
-        munmap(this->ar.start, this->ar.bytes);
-    this->ar.bytes = 0;
-    {
-        register t_symbol const * __nonnull const msg = gensym("getnuminputchannels");
-        if ( this->ar.immap )
-            xpc_release(this->ar.immap);
-        this->ar.immap = xpc_array_create_empty();
-        for ( register intptr_t j = 0, J = inlet_count(this) - 0 ; j < J ; ++ j )
-            for ( register intptr_t k = 0, K = object_method(dsp64, msg, this, j) ; k < K ; ++ k, this->ar.bytes += this->ar.cycle ) {
-                xpc_object_t const v = xpc_int64_create(this->ar.bytes);
-                xpc_array_append_value(this->ar.immap, v);
-                xpc_release(v);
-            }
+    if (connected) {
+        
+        this->ar.freqs = sampleRate;
+        this->ar.cycle = ( this->ar.frame = vectorSize ) + this->refer.delay; // in sample
+        
+        if ( this->ar.start )
+            munmap(this->ar.start, this->ar.bytes);
+        this->ar.bytes = 0;
+        {
+            register t_symbol const * __nonnull const msg = gensym("getnuminputchannels");
+            if ( this->ar.immap )
+                xpc_release(this->ar.immap);
+            this->ar.immap = xpc_array_create_empty();
+            for ( register intptr_t j = 0, J = inlet_count(this) - 0 ; j < J ; ++ j )
+                for ( register intptr_t k = 0, K = object_method(dsp64, msg, this, j) ; k < K ; ++ k, this->ar.bytes += this->ar.cycle ) {
+                    xpc_object_t const v = xpc_int64_create(this->ar.bytes);
+                    xpc_array_append_value(this->ar.immap, v);
+                    xpc_release(v);
+                }
+        }
+        {
+            register t_symbol const * __nonnull const msg = gensym("getnumoutputchannels");
+            if ( this->ar.ommap )
+                xpc_release(this->ar.ommap);
+            this->ar.ommap = xpc_array_create_empty();
+            for ( register intptr_t j = 0, J = outlet_count(this) - 1 ; j < J ; ++ j )
+                for ( register intptr_t k = 0, K = object_method(dsp64, msg, this, j) ; k < K ; ++ k, this->ar.bytes += this->ar.cycle ) {
+                    xpc_object_t const v = xpc_int64_create(this->ar.bytes);
+                    xpc_array_append_value(this->ar.ommap, v);
+                    xpc_release(v);
+                }
+        }
+        
+        this->ar.start = this->ar.bytes ?
+        mmap(0, this->ar.bytes *= sizeof(double const), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0) : NULL;
+        
+        // aggressive setup
+        setup(this);
+        
+        dsp_add64((t_object*const)dsp64,
+                  (t_object*const)this,
+                  (t_perfroutine64 const)routine64,
+                  0,
+                  this->ar.cycle < 2 * vectorSize ?
+                  (t_perfroutine64 const)synth : this->refer.guard ?
+                  (t_perfroutine64 const)guard :
+                  (t_perfroutine64 const)async);
     }
-    {
-        register t_symbol const * __nonnull const msg = gensym("getnumoutputchannels");
-        if ( this->ar.ommap )
-            xpc_release(this->ar.ommap);
-        this->ar.ommap = xpc_array_create_empty();
-        for ( register intptr_t j = 0, J = outlet_count(this) - 1 ; j < J ; ++ j )
-            for ( register intptr_t k = 0, K = object_method(dsp64, msg, this, j) ; k < K ; ++ k, this->ar.bytes += this->ar.cycle ) {
-                xpc_object_t const v = xpc_int64_create(this->ar.bytes);
-                xpc_array_append_value(this->ar.ommap, v);
-                xpc_release(v);
-            }
-    }
-    
-    this->ar.start = this->ar.bytes ?
-    mmap(0, this->ar.bytes *= sizeof(double const), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0) : NULL;
-    
-    // aggressive setup
-    setup(this);
-    
-    // register
-    dsp_add64((t_object*const)dsp64,
-              (t_object*const)this,
-              (t_perfroutine64 const)routine64,
-              0,
-              this->ar.cycle < 2 * vectorSize ?
-              (t_perfroutine64 const)synth : this->refer.guard ?
-              (t_perfroutine64 const)guard :
-              (t_perfroutine64 const)async);
 }
 C74_HIDDEN t_xpc const*const new(t_symbol*__nonnull const symbol, long const argc, t_atom const * __nonnull const argv) {
     intptr_t const offset = attr_args_offset(argc, argv);
