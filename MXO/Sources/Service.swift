@@ -220,11 +220,15 @@ extension Service where Object: MAX.MC {
                             guard
                                 case.some(let b) = xpc_dictionary_get_value($0, "#"), xpc_get_type(b) == XPC_TYPE_INT64,
                                 case.some(let v) = xpc_dictionary_get_value($0, "="), xpc_get_type(v) == XPC_TYPE_ARRAY else { break }
-                            let result = impress.list(at: .init(xpc_int64_get_value(b)), value: .init(xpc: v))
+                            impress.list(at: .init(xpc_int64_get_value(b)), value: .init(xpc: v))
                             if case.some(let r) = xpc_dictionary_create_reply($0), case.some(let p) = xpc_dictionary_get_remote_connection($0) {
-                                xpc_dictionary_set_value(r, "=", result.xpc)
                                 xpc_connection_send_message(p, r)
                             }
+//                            let result = impress.list(at: .init(xpc_int64_get_value(b)), value: .init(xpc: v))
+//                            if case.some(let r) = xpc_dictionary_create_reply($0), case.some(let p) = xpc_dictionary_get_remote_connection($0) {
+//                                xpc_dictionary_set_value(r, "=", result.xpc)
+//                                xpc_connection_send_message(p, r)
+//                            }
                         case.some("w"): // buffer (set)
                             guard
                                 case.some(let b) = xpc_dictionary_get_value($0, "#"), xpc_get_type(b) == XPC_TYPE_INT64,
