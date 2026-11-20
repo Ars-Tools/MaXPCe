@@ -12,10 +12,11 @@ public protocol EO: Sendable {
     init(args: Array<Atom>, notify: @escaping(Array<Atom>) -> Void)
     func description(for terminal: Terminal) -> String
     func bang(at inlet: Int)
-    func list(at inlet: Int, value: Array<Atom>) -> Array<Atom>
+    func list(at inlet: Int, value: Array<Atom>)
     func symbol(at inlet: Int, value: String)
     func number(at inlet: Int, value: Int64)
     func number(at inlet: Int, value: Float64)
+    func anything(at inlet: Int, value: Array<Atom>, selector: String) -> Array<Atom>
     func set(value: Atom, for attribute: String)
     // provide buffer memory with channel-major (planar) layout, notify update range to notify update the buffer
     func buffer(name: String, rate: Float64, rows: Int, cols: Int, buffer: UnsafeMutableBufferPointer<Float64>, stride: Int) -> (Range<Int>, Range<Int>)
@@ -23,10 +24,11 @@ public protocol EO: Sendable {
 extension EO { // default methods
     public func description(for terminal: Terminal) -> String { .init() }
     public func bang(at inlet: Int) {}
-    public func list(at inlet: Int, value: Array<Atom>) -> Array<Atom> { .init() }
+    public func list(at inlet: Int, value: Array<Atom>) {}
     public func symbol(at inlet: Int, value: String) {}
     public func number(at inlet: Int, value: Int64) {}
     public func number(at inlet: Int, value: Float64) {}
+    public func anything(at inlet: Int, value: Array<Atom>, selector: String) -> Array<Atom> { .init() }
     public func set(value: Atom, for attribute: String) {}
     public func buffer(name: String, rate: Float64, rows: Int, cols: Int, buffer: UnsafeMutableBufferPointer<Float64>, stride: Int) -> (Range<Int>, Range<Int>) {
         (0..<rows, 0..<cols)
