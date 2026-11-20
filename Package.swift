@@ -1,49 +1,17 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.4
 // The swift-tools-version declares the minimum version of Swift required to build this package.
-
 import PackageDescription
-
+import CompilerPluginSupport
 let package = Package(
     name: "MaXPCe",
     platforms: [
         .macOS(.v26)
     ],
     products: [
-        .library(name: "MXO", targets: ["MXO"]),
         .library(name: "MXI", targets: ["MXI"]),
+        .library(name: "MXO", targets: ["MXO"]),
     ],
     targets: [
-        .target(
-            name: "MXO",
-            dependencies: [
-                "MAX"
-            ],
-            path: "MXO/Sources"
-        ),
-        .executableTarget(
-            name: "MXO-Example",
-            dependencies: ["MXO"],
-            path: "MXO/Example",
-            cSettings: [
-                .define("ACCELERATE_NEW_LAPACK"),
-                .define("ACCELERATE_LAPACK_ILP64")
-            ]
-        ),
-        .target(
-            name: "MXI",
-            dependencies: ["MXO"],
-            path: "MXI/Sources",
-            resources: [
-                .process("../Resources")
-            ]
-        ),
-        .testTarget(
-            name: "MXITests",
-            dependencies: [
-                "MXI"
-            ],
-            path: "MXI/Tests"
-        ),
         .target(
             name: "MAX",
             path: "MAX/Sources"
@@ -54,6 +22,27 @@ let package = Package(
                 "MAX"
             ],
             path: "MAX/Tests"
+        ),
+        .target(
+            name: "MXI",
+            dependencies: [
+                "MAX"
+            ],
+            path: "MXI/Sources"
+        ),
+        .target(
+            name: "MXO",
+            dependencies: ["MAX"],
+            path: "MXO/Sources"
+        ),
+        .executableTarget(
+            name: "MXO-Example",
+            dependencies: ["MXO"],
+            path: "MXO/Example",
+            cSettings: [
+                .define("ACCELERATE_NEW_LAPACK"),
+                .define("ACCELERATE_LAPACK_ILP64")
+            ]
         )
     ]
 )
