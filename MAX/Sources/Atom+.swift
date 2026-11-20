@@ -4,7 +4,7 @@
 //
 //  Created by Kota on 8/6/26.
 //
-import Foundation
+import CoreFoundation
 extension Atom: _ObjectiveCBridgeable {
     public typealias _ObjectiveCType = CFTypeRef
     @inlinable
@@ -34,7 +34,10 @@ extension Atom: _ObjectiveCBridgeable {
             precondition(CFNumberGetValue(number, .sInt64Type, &native))
             result = .some(.Integer(native))
         case let symbol as CFString where CFGetTypeID(symbol) == CFStringGetTypeID():
-            result = .some(.Symbol(symbol as String))
+            result = .some(.Symbol(withUnsafeTemporaryAllocation(of: UInt16.self, capacity: CFStringGetLength(symbol)) {
+                CFStringGetCharacters(symbol, CFRange(location: 0, length: $0.count), $0.baseAddress)
+                return.init(decoding: $0, as: UTF16.self)
+            }))
         default:
             break
         }
@@ -53,7 +56,10 @@ extension Atom: _ObjectiveCBridgeable {
             result = .some(.Integer(native))
             return true
         case let symbol as CFString where CFGetTypeID(symbol) == CFStringGetTypeID():
-            result = .some(.Symbol(symbol as String))
+            result = .some(.Symbol(withUnsafeTemporaryAllocation(of: UInt16.self, capacity: CFStringGetLength(symbol)) {
+                CFStringGetCharacters(symbol, CFRange(location: 0, length: $0.count), $0.baseAddress)
+                return.init(decoding: $0, as: UTF16.self)
+            }))
             return true
         default:
             return false
@@ -71,11 +77,22 @@ extension Atom: _ObjectiveCBridgeable {
             precondition(CFNumberGetValue(number, .sInt64Type, &native))
             return.Integer(native)
         case.some(let symbol as CFString) where CFGetTypeID(symbol) == CFStringGetTypeID():
-            return.Symbol(symbol as String)
+            return.Symbol(withUnsafeTemporaryAllocation(of: UInt16.self, capacity: CFStringGetLength(symbol)) {
+                CFStringGetCharacters(symbol, CFRange(location: 0, length: $0.count), $0.baseAddress)
+                return.init(decoding: $0, as: UTF16.self)
+            })
         case.some(let other):
-            return.Symbol(CFCopyDescription(other) as String)
+            let symbol = CFCopyDescription(other)
+            return.Symbol(withUnsafeTemporaryAllocation(of: UInt16.self, capacity: CFStringGetLength(symbol)) {
+                CFStringGetCharacters(symbol, CFRange(location: 0, length: $0.count), $0.baseAddress)
+                return.init(decoding: $0, as: UTF16.self)
+            })
         case.none:
-            return.Symbol(CFCopyDescription(kCFNull) as String)
+            let symbol = CFCopyDescription(kCFNull)
+            return.Symbol(withUnsafeTemporaryAllocation(of: UInt16.self, capacity: CFStringGetLength(symbol)) {
+                CFStringGetCharacters(symbol, CFRange(location: 0, length: $0.count), $0.baseAddress)
+                return.init(decoding: $0, as: UTF16.self)
+            })
         }
     }
 }
